@@ -36,8 +36,19 @@ def add_canonical(menus: pd.DataFrame, matches: pd.DataFrame) -> pd.DataFrame:
     that (`cafe`, `item`) — missing for items the owner has not reviewed yet.
     Every row of `menus` is kept, in order; `menus` itself is not changed.
     """
-    # TODO: your code here
-    pass
+    result = menus.copy()
+
+    match_lookup = {
+        (row["cafe"], row["item"]): row["matched_to"]
+        for row in matches.to_dict("records")
+    }
+
+    result["canonical"] = [
+        item if cafe == OUR_CAFE else match_lookup.get((cafe, item))
+        for cafe, item in zip(result["cafe"], result["item"])
+    ]
+
+    return result
 
 
 def price_table(menus: pd.DataFrame) -> pd.DataFrame:
@@ -69,8 +80,15 @@ def price_position(ours: float, low: float, average: float, high: float) -> str:
 
     Check them in that order: with one rival, low, average and high are the same.
     """
-    # TODO: your code here
-    pass
+    if ours < low:
+        return BELOW_ALL
+    if ours > high:
+        return ABOVE_ALL
+    if ours < average:
+        return BELOW_AVERAGE
+    if ours > average:
+        return ABOVE_AVERAGE
+    return AT_AVERAGE
 
 
 def compare_prices(prices: pd.DataFrame) -> pd.DataFrame:
@@ -92,8 +110,50 @@ def compare_prices(prices: pd.DataFrame) -> pd.DataFrame:
 
     Plain index.
     """
-    # TODO: your code here
-    pass
+    rival_columns = [
+        cafe for cafe in prices.columns
+        if cafe != OUR_CAFE
+    ]
+
+    result = prices.reset_index()
+
+    result = result[
+        result[OUR_CAFE].notna()
+        & result[rival_columns].notna().any(axis=1)
+    ].copy()
+
+    result = result.rename(columns={OUR_CAFE: "our_price"})
+
+    result["rival_avg"] = (
+        result[rival_columns].mean(axis=1).round(2)
+    )
+
+    positions = []
+
+    for _, row in result.iterrows():
+        rival_prices = row[rival_columns].dropna()
+
+        positions.append(
+            price_position(
+                row["our_price"],
+                rival_prices.min(),
+                row["rival_avg"],
+                rival_prices.max(),
+            )
+        )
+
+    result["our_position"] = positions
+
+    columns = [
+        "canonical",
+        "size",
+        "our_price",
+        *rival_columns,
+        "rival_avg",
+        "our_position",
+    ]
+
+    return result[columns].reset_index(drop=True)
 
 
 def gap_analysis(menus: pd.DataFrame) -> pd.DataFrame:
@@ -112,5 +172,59 @@ def gap_analysis(menus: pd.DataFrame) -> pd.DataFrame:
     Sorted by `where` ("only them" first, then "only us", then "both"), then
     `rivals` (most first), then `canonical`; plain index.
     """
-    # TODO: your code here
-    pass
+    known = menus.dropna(subset=["canonical"])
+
+    ours = (
+        known.loc[known["cafe"] == OUR_CAFE, ["canonical", "kind"]]
+        .drop_duplicates()
+    )
+
+    theirs = (
+        known.loc[
+            known["cafe"] != OUR_CAFE,
+            ["cafe", "canonical", "kind"],
+        ]
+        .drop_duplicates()
+    )
+
+    rival_summary = (
+        theirs.groupby(["canonical", "kind"])["cafe"]
+        .agg(
+            rivals="nunique",
+            sold_by=lambda cafes: ", ".join(sorted(cafes.unique())),
+        )
+        .reset_index()
+    )
+
+    result = ours.merge(
+        rival_summary,
+        on=["canonical", "kind"],
+        how="outer",
+        indicator=True,
+    )
+
+    result["where"] = result["_merge"].astype(str).map({
+        "left_only": "only us",
+        "right_only": "only them",
+        "both": "both",
+    })
+
+    result["rivals"] = result["rivals"].fillna(0).astype(int)
+    result["sold_by"] = result["sold_by"].fillna("")
+
+    where_order = {
+        "only them": 0,
+        "only us": 1,
+        "both": 2,
+    }
+
+    result["_where_order"] = result["where"].map(where_order)
+
+    result = result.sort_values(
+        ["_where_order", "rivals", "canonical"],
+        ascending=[True, False, True],
+    )
+
+    return result[
+        ["canonical", "kind", "where", "rivals", "sold_by"]
+    ].reset_index(drop=True)

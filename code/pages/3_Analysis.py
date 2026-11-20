@@ -45,15 +45,44 @@ from rivals.settings import DECISION_COLUMNS
 #    menus, decisions and matches exactly as on the Review Matches page.
 #    waiting <- how many matches are "unreviewed". If any: st.warning that says how
 #    many, that they are left out, and to finish them on the Review Matches page.
-#
+st.set_page_config(layout="wide")
+st.title("Salt City: Prices and Gaps")
+
+if not os.path.exists(MENUS_FILE):
+    st.info("No menus yet — scrape the cafés' menus first.")
+    st.stop()
+
+menus = pd.read_csv(MENUS_FILE)
+
+if os.path.exists(DECISIONS_FILE):
+    decisions = pd.read_csv(DECISIONS_FILE)
+else:
+    decisions = pd.DataFrame(columns=DECISION_COLUMNS)
+
+matches = match_items(menus, decisions)
+
+waiting = (matches["status"] == "unreviewed").sum()
+
+if waiting:
+    st.warning(
+        f"{waiting} items have not been reviewed. "
+        "They are left out of the analysis. "
+        "Finish reviewing them on the Review Matches page."
+    )
+
 # 2. THE ANALYSIS (all of it is in the package — the page only calls it)
 #    menus <- add_canonical(menus, matches)
 #    prices <- price_table(menus)
 #    comparison <- compare_prices(prices)
 #    gaps <- gap_analysis(menus)
-#
+menus = add_canonical(menus, matches)
+prices = price_table(menus)
+comparison = compare_prices(prices)
+gaps = gap_analysis(menus)
+
 # 3. TWO TABS: st.tabs(["Prices", "Gaps"])
-#
+prices_tab, gaps_tab = st.tabs(["Prices", "Gaps"])
+
 # 4. THE PRICES TAB (inside `with prices_tab:`)
 #    a. Two metrics side by side: "Priced below the market" (rows of comparison
 #       whose our_position is BELOW_ALL or BELOW_AVERAGE — .isin([...])) and "Priced
@@ -67,8 +96,55 @@ from rivals.settings import DECISION_COLUMNS
 #    d. st.caption that explains the our_position column, e.g. "👍👍 lower than all of
 #       them · 👍 lower than their average · 👉👈 average · 👎 higher than their
 #       average · 👎👎 higher than all of them".
-#
+with prices_tab:
+    below = comparison["our_position"].isin(
+        [BELOW_ALL, BELOW_AVERAGE]
+    ).sum()
+
+    above = comparison["our_position"].isin(
+        [ABOVE_ALL, ABOVE_AVERAGE]
+    ).sum()
+
+    col1, col2 = st.columns(2)
+
+    col1.metric("Priced below the market", below)
+    col2.metric("Priced above the market", above)
+
+    products = st.multiselect(
+        "Products",
+        options=sorted(comparison["canonical"].dropna().unique()),
+        key="products",
+        placeholder="All products",
+    )
+
+    if products:
+        shown = comparison[
+            comparison["canonical"].isin(products)
+        ]
+    else:
+        shown = comparison
+
+    st.dataframe(shown, hide_index=True)
+
+    st.caption(
+        "👍👍 lower than all of them · "
+        "👍 lower than their average · "
+        "👉👈 average · "
+        "👎 higher than their average · "
+        "👎👎 higher than all of them"
+    )
+
 # 5. THE GAPS TAB (inside `with gaps_tab:`)
 #    st.subheader "Only them — what we don't sell yet" and st.dataframe of the
 #    gaps rows where `where` is "only them"; then st.subheader "Only us — what sets
 #    us apart" and the "only us" rows.
+with gaps_tab:
+    st.subheader("Only them — what we don't sell yet")
+
+    only_them = gaps[gaps["where"] == "only them"]
+    st.dataframe(only_them, hide_index=True)
+
+    st.subheader("Only us — what sets us apart")
+
+    only_us = gaps[gaps["where"] == "only us"]
+    st.dataframe(only_us, hide_index=True)
