@@ -110,39 +110,31 @@ def compare_prices(prices: pd.DataFrame) -> pd.DataFrame:
 
     Plain index.
     """
-    rival_columns = [
-        cafe for cafe in prices.columns
-        if cafe != OUR_CAFE
-    ]
+    rival_columns = [cafe for cafe in prices.columns if cafe != OUR_CAFE]
 
     result = prices.reset_index()
-
     result = result[
         result[OUR_CAFE].notna()
         & result[rival_columns].notna().any(axis=1)
     ].copy()
 
-    result = result.rename(columns={OUR_CAFE: "our_price"})
+    rival_prices = result[rival_columns]
 
-    result["rival_avg"] = (
-        result[rival_columns].mean(axis=1).round(2)
-    )
+    result["our_price"] = result[OUR_CAFE]
+    result["rival_avg"] = rival_prices.mean(axis=1).round(2)
 
-    positions = []
+    low = rival_prices.min(axis=1)
+    high = rival_prices.max(axis=1)
 
-    for _, row in result.iterrows():
-        rival_prices = row[rival_columns].dropna()
-
-        positions.append(
-            price_position(
-                row["our_price"],
-                rival_prices.min(),
-                row["rival_avg"],
-                rival_prices.max(),
-            )
+    result["our_position"] = [
+        price_position(ours, lowest, average, highest)
+        for ours, lowest, average, highest in zip(
+            result["our_price"],
+            low,
+            result["rival_avg"],
+            high,
         )
-
-    result["our_position"] = positions
+    ]
 
     columns = [
         "canonical",

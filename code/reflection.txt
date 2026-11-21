@@ -6,3 +6,15 @@ selectors, sibling selector, inner_text, attribute, headless browser, waiting fo
 JavaScript, crawling, pagination, read_html, melt, fuzzy matching, normalization,
 threshold, human in the loop, merge indicator, gap analysis), and make it
 actionable.
+
+I learned how much work goes into building a data pipeline before you can actually analyze the data. For this assignment, I scraped menus from different coffee shop websites, cleaned the data into a consistent format, matched similar items, and compared prices. Since each website had a different HTML structure, I had to use different scraping methods. I practiced using Playwright and CSS selectors to extract information, and used `pd.read_html()` to extract Hilltop Grind's menu table and `melt()` to turn size columns into individual rows.
+
+One specific struggle was scraping Lakeshore Lattes. My initial `heading.query_selector("~ div.menu-grid")` search returned nothing because I misunderstood search scope. `query_selector()` searches inside an element, while the sibling selector (`~`) looks for elements at the same level. I eventually used `evaluate_handle` to walk forward through the siblings and locate the menu grid. This taught me to pay closer attention to the HTML structure and where a selector is searching from.
+
+Another challenge was matching menu items with different names. I learned how normalization standardizes names before using fuzzy matching with `token_sort_ratio`. However, a high similarity score does not guarantee two items are the same. The threshold of 90 helps automate obvious matches, while uncertain matches require human review. I also encountered a gap-analysis bug where every item appeared as "only us." I had passed raw matching decisions into `add_canonical()` instead of the output from `match_items()`. This showed me how an error early in a pipeline can affect the analysis that follows.
+
+Some difficulties were also related to the development environment rather than my code. I ran into missing `lxml` and `rapidfuzz` packages, and accidentally left a Git lock file after suspending a commit with Ctrl+Z. I learned that debugging involves understanding the environment and command-line tools, not just Python.
+
+I still have questions about the Analysis page, particularly why one count showed 24 items instead of 25 and whether my `compare_prices()` implementation follows the intended vectorized pandas approach. I also want more practice knowing when JavaScript-loaded pages require `wait_for_selector()` before scraping.
+
+To practice, I will build a small six-row dataset and use an outer merge with `indicator=True`, predicting which rows should be `left_only`, `right_only`, or `both` before running the code. I also want to test fuzzy matching on similar but different drink names. This assignment helped me understand how scraping, cleaning, matching, and analysis depend on one another in a complete data pipeline.

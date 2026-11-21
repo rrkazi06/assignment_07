@@ -52,30 +52,25 @@ def scrape_lakeshore(page) -> list[dict]:
     page.goto(cafe_url("Lakeshore Lattes"))
 
     rows = []
-
     headings = page.query_selector_all("h2.menu-section__title")
 
     for heading in headings:
         category = heading.inner_text().strip()
 
-        # Walk forward through the siblings until we reach the menu grid
-        grid_handle = heading.evaluate_handle("""
-            h => {
-                let el = h.nextElementSibling;
-                while (el && !el.matches('div.menu-grid')) {
-                    el = el.nextElementSibling;
-                }
-                return el;
-            }
-        """)
-        grid = grid_handle.as_element()
+        grid = heading.query_selector("~ div.menu-grid")
 
         if grid is None:
             continue
 
-        for card in grid.query_selector_all("article.menu-card"):
+        cards = grid.query_selector_all("article.menu-card")
+
+        for card in cards:
             rows.extend(
-                card_rows("Lakeshore Lattes", category, card.inner_text())
+                card_rows(
+                    "Lakeshore Lattes",
+                    category,
+                    card.inner_text()
+                )
             )
 
     return rows
